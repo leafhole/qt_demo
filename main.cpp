@@ -22,12 +22,6 @@ inline int randInt(int min, int max) {
     return dist(rng);
 }
 
-inline qreal randReal(qreal min, qreal max) {
-    std::uniform_real_distribution<qreal> dist(min, max);
-    return dist(rng);
-}
-
-// 动态粒子类 - 用于展示大量元素的渲染
 class ParticleItem : public QGraphicsEllipseItem
 {
 public:
@@ -48,8 +42,6 @@ public:
         QPointF pos = this->pos();
         pos.setX(pos.x() + m_vx);
         pos.setY(pos.y() + m_vy);
-
-        // 边界反弹
         if (pos.x() < m_size || pos.x() > width - m_size) {
             m_vx = -m_vx;
             pos.setX(qMax(m_size, qMin(width - m_size, pos.x())));
@@ -58,7 +50,6 @@ public:
             m_vy = -m_vy;
             pos.setY(qMax(m_size, qMin(height - m_size, pos.y())));
         }
-
         setPos(pos);
     }
 
@@ -67,7 +58,6 @@ private:
     qreal m_size;
 };
 
-// 帧率显示类
 class FpsCounter : public QGraphicsTextItem
 {
 public:
@@ -85,7 +75,6 @@ public:
         m_frameCount++;
         qint64 now = QDateTime::currentMSecsSinceEpoch();
         qint64 delta = now - m_lastTime;
-
         if (delta >= 1000) {
             m_fps = m_frameCount * 1000.0 / delta;
             setPlainText(QString("FPS: %1").arg(m_fps, 0, 'f', 1));
@@ -94,99 +83,103 @@ public:
         }
     }
 
-    double getFps() const { return m_fps; }
-
 private:
     int m_frameCount;
     qint64 m_lastTime;
     double m_fps = 0;
 };
 
+// 创建场景的辅助函数
+QGraphicsScene* createScene(int width, int height, int particleCount, FpsCounter*& fpsCounter)
+{
+    QGraphicsScene* scene = new QGraphicsScene();
+    scene->setSceneRect(0, 0, width, height);
+
+    QGraphicsRectItem* bg = new QGraphicsRectItem(0, 0, width, height);
+    bg->setBrush(QBrush(QColor(20, 20, 40)));
+    bg->setPen(Qt::NoPen);
+    scene->addItem(bg);
+
+    for (int i = 0; i < particleCount; ++i) {
+        qreal x = randInt(0, width - 1);
+        qreal y = randInt(0, height - 1);
+        qreal size = 5 + randInt(0, 15);
+        QColor color = QColor::fromHsl(randInt(0, 359), 200, 128);
+        ParticleItem* p = new ParticleItem(x, y, size, color);
+        scene->addItem(p);
+    }
+
+    fpsCounter = new FpsCounter();
+    fpsCounter->setPos(10, 10);
+    scene->addItem(fpsCounter);
+
+    return scene;
+}
+
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
-
-    // 初始化随机数生成器
     rng.seed(std::random_device{}());
 
-    // 设置 OpenGL 配置
     QSurfaceFormat format;
     format.setVersion(3, 3);
     format.setProfile(QSurfaceFormat::CoreProfile);
     format.setSamples(4);
-    format.setDepthBufferSize(24);
     QSurfaceFormat::setDefaultFormat(format);
 
-    const int SCENE_WIDTH = 800;
-    const int SCENE_HEIGHT = 600;
-    const int PARTICLE_COUNT = 500;  // 大量粒子，压力测试
+    const int WIDTH = 800;
+    const int HEIGHT = 600;
+    const int PARTICLE_COUNT = 2000;  // 大幅增加粒子数量
 
-    // 创建舞台（Scene）
-    QGraphicsScene scene;
-    scene.setSceneRect(0, 0, SCENE_WIDTH, SCENE_HEIGHT);
+    // ========== 场景1：OpenGL 加速窗口 ==========
+    FpsCounter* glFps = nullptr;
+    QGraphicsScene* glScene = createScene(WIDTH, HEIGHT, PARTICLE_COUNT, glFps);
+    QList<QGraphicsItem*> glParticles = glScene->items();
 
-    // 背景
-    QGraphicsRectItem* bg = new QGraphicsRectItem(0, 0, SCENE_WIDTH, SCENE_HEIGHT);
-    bg->setBrush(QBrush(QColor(20, 20, 40)));
-    bg->setPen(Qt::NoPen);
-    scene.addItem(bg);
-
-    // 添加大量动态粒子
-    QList<ParticleItem*> particles;
-    for (int i = 0; i < PARTICLE_COUNT; ++i) {
-        qreal x = randInt(0, SCENE_WIDTH - 1);
-        qreal y = randInt(0, SCENE_HEIGHT - 1);
-        qreal size = 5 + randInt(0, 15);
-        QColor color = QColor::fromHsl(randInt(0, 359), 200, 128);
-        ParticleItem* p = new ParticleItem(x, y, size, color);
-        particles.append(p);
-        scene.addItem(p);
-    }
-
-    // ========== 窗口1：使用 OpenGL 加速 ==========
-    QGraphicsView glView(&scene);
+    QGraphicsView glView(glScene);
     QOpenGLWidget* glWidget = new QOpenGLWidget();
-    glView.setViewport(glWidget);  // 使用 OpenGL viewport
+    glView.setViewport(glWidget);
     glView.setRenderHint(QPainter::Antialiasing);
-    glView.setWindowTitle("[OpenGL 加速] 500个粒子 - 对比演示");
-    glView.resize(SCENE_WIDTH + 50, SCENE_HEIGHT + 50);
+    glView.setWindowTitle(QString("[OpenGL 加速] %1个粒子").arg(PARTICLE_COUNT));
+    glView.resize(WIDTH + 50, HEIGHT + 50);
     glView.show();
 
-    FpsCounter* glFps = new FpsCounter();
-    glFps->setPos(10, 10);
-    scene.addItem(glFps);
+    // ========== 场景2：软件渲染窗口 ==========
+    // 使用独立场景，确保公平对比
+    FpsCounter* noGlFps = nullptr;
+    QGraphicsScene* noGlScene = createScene(WIDTH, HEIGHT, PARTICLE_COUNT, noGlFps);
+    QList<QGraphicsItem*> noGlParticles = noGlScene->items();
 
-    // ========== 窗口2：不使用 OpenGL（软件渲染） ==========
-    QGraphicsView noGlView(&scene);
-    // 不调用 setViewport()，使用默认的 QWidget（软件渲染）
+    QGraphicsView noGlView(noGlScene);
+    // 不设置 viewport，使用默认软件渲染
     noGlView.setRenderHint(QPainter::Antialiasing);
-    noGlView.setWindowTitle("[软件渲染] 500个粒子 - 对比演示");
-    noGlView.resize(SCENE_WIDTH + 50, SCENE_HEIGHT + 50);
-    noGlView.move(SCENE_WIDTH + 60, 0);
+    noGlView.setWindowTitle(QString("[软件渲染] %1个粒子").arg(PARTICLE_COUNT));
+    noGlView.resize(WIDTH + 50, HEIGHT + 50);
+    noGlView.move(WIDTH + 60, 0);
     noGlView.show();
 
-    FpsCounter* noGlFps = new FpsCounter();
-    noGlFps->setPos(10, SCENE_HEIGHT - 30);
-    scene.addItem(noGlFps);
-
-    // 更新定时器 - 60 FPS
+    // 更新定时器
     QTimer updateTimer;
     QObject::connect(&updateTimer, &QTimer::timeout, [&]() {
-        // 更新所有粒子位置
-        for (ParticleItem* p : particles) {
-            p->updatePosition(SCENE_WIDTH, SCENE_HEIGHT);
+        for (QGraphicsItem* item : glParticles) {
+            ParticleItem* p = dynamic_cast<ParticleItem*>(item);
+            if (p) p->updatePosition(WIDTH, HEIGHT);
         }
-        // 更新帧率
         glFps->tick();
+
+        for (QGraphicsItem* item : noGlParticles) {
+            ParticleItem* p = dynamic_cast<ParticleItem*>(item);
+            if (p) p->updatePosition(WIDTH, HEIGHT);
+        }
         noGlFps->tick();
     });
-    updateTimer.start(16);  // ~60 FPS
+    updateTimer.start(16);
 
     qDebug() << "=== OpenGL vs 软件渲染对比演示 ===";
-    qDebug() << "· 场景包含:" << PARTICLE_COUNT << "个动态粒子";
-    qDebug() << "· 左侧窗口: OpenGL 硬件加速";
-    qDebug() << "· 右侧窗口: 软件渲染 (CPU)";
-    qDebug() << "· 观察两个窗口的 FPS 差异";
+    qDebug() << "· 粒子数量:" << PARTICLE_COUNT;
+    qDebug() << "· 左侧: OpenGL 硬件加速 (GPU)";
+    qDebug() << "· 右侧: 软件渲染 (CPU)";
+    qDebug() << "· 预计: OpenGL 帧率显著高于软件渲染";
 
     return app.exec();
 }
