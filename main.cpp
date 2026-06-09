@@ -30,6 +30,8 @@ struct Particle {
     qreal vx, vy;
     qreal size;
     QColor color;
+    int alpha;       // 透明度
+    int rotation;    // 旋转角度
 };
 
 // 纯软件渲染窗口 - 不使用任何GPU加速
@@ -40,14 +42,16 @@ public:
     SoftwareRenderWidget(QWidget* parent = nullptr) : QWidget(parent)
     {
         setFixedSize(800, 600);
-        m_particles.resize(2000);
+        m_particles.resize(10000);  // 大幅增加粒子数量
         for (int i = 0; i < m_particles.size(); ++i) {
             m_particles[i].x = randInt(0, 799);
             m_particles[i].y = randInt(0, 599);
             m_particles[i].vx = (randInt(-100, 100)) / 50.0;
             m_particles[i].vy = (randInt(-100, 100)) / 50.0;
-            m_particles[i].size = 5 + randInt(0, 15);
+            m_particles[i].size = 3 + randInt(0, 10);
             m_particles[i].color = QColor::fromHsl(randInt(0, 359), 200, 128);
+            m_particles[i].alpha = 128 + randInt(0, 127);  // 透明度
+            m_particles[i].rotation = randInt(0, 359);
         }
         m_frameCount = 0;
         m_lastTime = QDateTime::currentMSecsSinceEpoch();
@@ -64,11 +68,15 @@ protected:
         QPainter painter(&buffer);
         painter.setRenderHint(QPainter::Antialiasing);
         
-        // 绘制所有粒子
+        // 绘制所有粒子（带透明度和旋转，增加渲染复杂度）
         for (const Particle& p : m_particles) {
-            painter.setBrush(QBrush(p.color));
-            painter.setPen(Qt::NoPen);
-            painter.drawEllipse(QPointF(p.x, p.y), p.size/2, p.size/2);
+            painter.save();
+            painter.translate(p.x, p.y);
+            painter.rotate(p.rotation);
+            painter.setBrush(QBrush(QColor(p.color.red(), p.color.green(), p.color.blue(), p.alpha)));
+            painter.setPen(QPen(QColor(255, 255, 255, 128), 1));
+            painter.drawEllipse(QPointF(0, 0), p.size/2, p.size/2);
+            painter.restore();
         }
         
         // 绘制FPS
@@ -87,6 +95,7 @@ public slots:
         for (Particle& p : m_particles) {
             p.x += p.vx;
             p.y += p.vy;
+            p.rotation += 2;  // 旋转
             if (p.x < p.size || p.x > width() - p.size) {
                 p.vx = -p.vx;
                 p.x = qMax(p.size, qMin((qreal)(width() - p.size), p.x));
@@ -124,14 +133,16 @@ public:
     OpenGLRenderWidget(QWidget* parent = nullptr) : QOpenGLWidget(parent)
     {
         setFixedSize(800, 600);
-        m_particles.resize(2000);
+        m_particles.resize(10000);  // 同样使用10000个粒子
         for (int i = 0; i < m_particles.size(); ++i) {
             m_particles[i].x = randInt(0, 799);
             m_particles[i].y = randInt(0, 599);
             m_particles[i].vx = (randInt(-100, 100)) / 50.0;
             m_particles[i].vy = (randInt(-100, 100)) / 50.0;
-            m_particles[i].size = 5 + randInt(0, 15);
+            m_particles[i].size = 3 + randInt(0, 10);
             m_particles[i].color = QColor::fromHsl(randInt(0, 359), 200, 128);
+            m_particles[i].alpha = 128 + randInt(0, 127);
+            m_particles[i].rotation = randInt(0, 359);
         }
         m_frameCount = 0;
         m_lastTime = QDateTime::currentMSecsSinceEpoch();
@@ -146,11 +157,15 @@ protected:
         painter.setRenderHint(QPainter::Antialiasing);
         painter.fillRect(rect(), QColor(20, 20, 40));
         
-        // 绘制所有粒子
+        // 绘制所有粒子（带透明度和旋转）
         for (const Particle& p : m_particles) {
-            painter.setBrush(QBrush(p.color));
-            painter.setPen(Qt::NoPen);
-            painter.drawEllipse(QPointF(p.x, p.y), p.size/2, p.size/2);
+            painter.save();
+            painter.translate(p.x, p.y);
+            painter.rotate(p.rotation);
+            painter.setBrush(QBrush(QColor(p.color.red(), p.color.green(), p.color.blue(), p.alpha)));
+            painter.setPen(QPen(QColor(255, 255, 255, 128), 1));
+            painter.drawEllipse(QPointF(0, 0), p.size/2, p.size/2);
+            painter.restore();
         }
         
         // 绘制FPS
@@ -165,6 +180,7 @@ public slots:
         for (Particle& p : m_particles) {
             p.x += p.vx;
             p.y += p.vy;
+            p.rotation += 2;  // 旋转
             if (p.x < p.size || p.x > width() - p.size) {
                 p.vx = -p.vx;
                 p.x = qMax(p.size, qMin((qreal)(width() - p.size), p.x));
@@ -208,12 +224,12 @@ int main(int argc, char *argv[])
 
     // ========== 窗口1：OpenGL加速 ==========
     OpenGLRenderWidget* glWidget = new OpenGLRenderWidget();
-    glWidget->setWindowTitle("[OpenGL 加速] 2000个粒子 - GPU渲染");
+    glWidget->setWindowTitle("[OpenGL 加速] 10000个粒子 - GPU渲染");
     glWidget->show();
 
     // ========== 窗口2：纯软件渲染 ==========
     SoftwareRenderWidget* swWidget = new SoftwareRenderWidget();
-    swWidget->setWindowTitle("[纯软件渲染] 2000个粒子 - CPU渲染");
+    swWidget->setWindowTitle("[纯软件渲染] 10000个粒子 - CPU渲染");
     swWidget->move(820, 0);
     swWidget->show();
 
@@ -224,10 +240,10 @@ int main(int argc, char *argv[])
     timer.start(16);
 
     qDebug() << "=== OpenGL vs 纯软件渲染对比演示 ===";
-    qDebug() << "· 粒子数量: 2000";
+    qDebug() << "· 粒子数量: 10000";
     qDebug() << "· 左侧: OpenGL加速 (GPU)";
     qDebug() << "· 右侧: 纯软件渲染 (CPU)";
-    qDebug() << "· 软件渲染使用QImage作为缓冲区，完全在CPU上绘制";
+    qDebug() << "· 每个粒子包含：位置、速度、大小、颜色、透明度、旋转";
 
     return app.exec();
 }
