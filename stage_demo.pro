@@ -1,4 +1,4 @@
-QT += core gui widgets opengl
+QT += core gui widgets openglwidgets
 
 TARGET = stage_demo
 TEMPLATE = app
