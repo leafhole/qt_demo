@@ -1,0 +1,9 @@
+stage_demo
+*.o
+*.moc
+moc_*
+Makefile
+.qmake.stash
+.ui
+*.user
+
