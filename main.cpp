@@ -13,6 +13,8 @@
 #include <QTimer>
 #include <QList>
 #include <QDebug>
+#include <QOpenGLWidget>
+#include <QSurfaceFormat>
 
 /* ============================================================
  * 舞台剧比喻：
@@ -155,6 +157,14 @@ int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
 
+    // 设置 OpenGL 3.3 核心配置（硬件加速）
+    QSurfaceFormat format;
+    format.setVersion(3, 3);
+    format.setProfile(QSurfaceFormat::CoreProfile);
+    format.setSamples(4);                // 4x MSAA 抗锯齿
+    format.setDepthBufferSize(24);       // 深度缓冲大小
+    QSurfaceFormat::setDefaultFormat(format);
+
     // ---------- ① QGraphicsScene —— 舞台本身 ----------
     // 舞台是一个 800x500 的虚拟坐标空间，
     // 它本身不可见，但管理所有演员/道具的生命周期与碰撞检测。
@@ -213,21 +223,26 @@ int main(int argc, char *argv[])
     // ---------- ③ QGraphicsView —— 观众的眼睛/摄像机 ----------
     // View 不拥有数据，它只是一个"摄像机"，
     // 把同一份 scene 里的内容渲染到屏幕上。
+    // 使用 QOpenGLWidget 作为 viewport，开启硬件加速！
     QGraphicsView view(&stage);
+    QOpenGLWidget *glWidget = new QOpenGLWidget();
+    view.setViewport(glWidget);             // 关键：使用 OpenGL viewport
     view.setRenderHint(QPainter::Antialiasing);
     view.setBackgroundBrush(QBrush(Qt::black));
-    view.setWindowTitle("QGraphicsView = 观众的眼睛");
+    view.setWindowTitle("QGraphicsView = 观众的眼睛 (OpenGL 加速)");
     view.resize(850, 550);
     view.show();
 
     // 再开一个"摄像机"——同一个舞台，从另一视角观看（略缩小）
     // 这直观展示了"一个 scene 可以被多个 view 观察"的核心设计。
     QGraphicsView view2(&stage);
+    QOpenGLWidget *glWidget2 = new QOpenGLWidget();
+    view2.setViewport(glWidget2);           // 第二个 view 也用 OpenGL
     view2.setRenderHint(QPainter::Antialiasing);
     view2.scale(0.6, 0.6);                 // 这个摄像机"拉远了"，画面更小
     view2.rotate(5);                        // 还稍微歪了 5 度
     view2.setBackgroundBrush(QBrush(QColor(20, 20, 40)));
-    view2.setWindowTitle("QGraphicsView #2 = 另一台摄像机（缩小+倾斜）");
+    view2.setWindowTitle("QGraphicsView #2 = 另一台摄像机 (OpenGL 加速)");
     view2.resize(550, 400);
     view2.move(900, 100);
     view2.show();
@@ -236,6 +251,7 @@ int main(int argc, char *argv[])
     qDebug() << "=== 舞台与演员 Demo 启动 ===";
     qDebug() << "· 舞台大小:" << stage.sceneRect();
     qDebug() << "· 舞台上的 item 总数:" << stage.items().count();
+    qDebug() << "· OpenGL 硬件加速已启用 (QOpenGLWidget viewport)";
     qDebug() << "· 试试用鼠标拖动笑脸演员 —— 他们只是舞台上的 QGraphicsItem";
     qDebug() << "· 两个窗口显示的是同一个 scene —— 一个演员动，两个窗口都能看到";
 
