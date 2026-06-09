@@ -1,0 +1,7 @@
+# Build artifacts
+*.o
+*.moc
+moc_*
+Makefile
+*.pro.user
+.qmake.stash
